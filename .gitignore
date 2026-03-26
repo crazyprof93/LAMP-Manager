@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Database files (keep structure but not data)
+db/mysql/
+db/performance_schema/
+db/sys/
+db/testdb/
+db/test/
+db/*.log
+db/ib_logfile*
+db/ibdata*
+db/aria_log*
+db/*.pid
+db/*.err
+db/.my-healthcheck.cnf
+db/ib_buffer_pool
+
+# Docker
+.dockerignore
+
+# Configuration with sensitive data
+lamp_config.json
+
+# Temporary files
+*.tmp
+*.temp
+db/ibtmp1
+db/multi-master.info
+db/mysql_upgrade_info

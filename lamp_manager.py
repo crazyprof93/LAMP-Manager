@@ -978,7 +978,8 @@ class LAMPManager:
             el['stop_btn'].config(state='normal' if running else 'disabled')
             self._update_status_labels(el, running)
             if running:
-                self.refresh_databases(server_id)
+                # Give database server time to start up
+                self.root.after(2000, lambda: self.refresh_databases(server_id))
             else:
                 for item in el['db_tree'].get_children():
                     el['db_tree'].delete(item)
@@ -1013,44 +1014,62 @@ class LAMPManager:
         if not hasattr(current_tab, 'ui_elements'):
             return
         el = current_tab.ui_elements
-        if not self.server_running:
+        if not self.check_server_status_for_tab(server_id):
+            el['status_bar'].config(text=self.lang.get('server_stopped'))
             return
         el['status_bar'].config(text=self.lang.get('loading_databases'))
         db_tree = el['db_tree']
         db_tree.delete(*db_tree.get_children())
+        
+        # Try to connect with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                connection = self.get_db_connection(server_id)
+                if connection:
+                    break
+                if attempt < max_retries - 1:
+                    el['status_bar'].config(text=f"Versuch {attempt + 1}/{max_retries}...")
+                    time.sleep(2)
+            except:
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                continue
+        else:
+            el['status_bar'].config(text=self.lang.get('no_db_connection'))
+            return
+            
         try:
-            connection = self.get_db_connection(server_id)
-            if connection:
-                cursor = connection.cursor()
-                cursor.execute("SHOW DATABASES")
-                for (db_name,) in cursor.fetchall():
-                    if db_name in ('information_schema', 'performance_schema', 'mysql', 'sys'):
-                        continue
-                    cursor.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '{db_name}'")
-                    table_count = cursor.fetchone()[0]
-                    cursor.execute(f"""
-                        SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2)
-                        FROM information_schema.tables WHERE table_schema = '{db_name}'
-                    """)
-                    size_result = cursor.fetchone()
-                    size = f"{size_result[0]} MB" if size_result[0] else "0 MB"
-                    cursor.execute(f"""
-                        SELECT DISTINCT GRANTEE FROM information_schema.schema_privileges
-                        WHERE TABLE_SCHEMA = '{db_name}'
-                          AND PRIVILEGE_TYPE IN ('SELECT','INSERT','UPDATE','DELETE','CREATE','DROP','ALTER','INDEX')
-                        UNION
-                        SELECT DISTINCT CONCAT(User,'@',Host) FROM mysql.db WHERE Db = '{db_name}'
-                    """)
-                    user_list = sorted({row[0].replace("'", "").strip() for row in cursor.fetchall()})
-                    users_text = ", ".join(user_list) if user_list else "Keine Benutzer"
-                    db_tree.insert('', 'end', text=db_name, values=(users_text, size, table_count))
-                cursor.close()
-                connection.close()
-                el['status_bar'].config(text=self.lang.get('databases_found').format(len(db_tree.get_children())))
-            else:
-                el['status_bar'].config(text=self.lang.get('no_db_connection'))
+            cursor = connection.cursor()
+            cursor.execute("SHOW DATABASES")
+            for (db_name,) in cursor.fetchall():
+                if db_name in ('information_schema', 'performance_schema', 'mysql', 'sys'):
+                    continue
+                cursor.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '{db_name}'")
+                table_count = cursor.fetchone()[0]
+                cursor.execute(f"""
+                    SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2)
+                    FROM information_schema.tables WHERE table_schema = '{db_name}'
+                """)
+                size_result = cursor.fetchone()
+                size = f"{size_result[0]} MB" if size_result[0] else "0 MB"
+                cursor.execute(f"""
+                    SELECT DISTINCT GRANTEE FROM information_schema.schema_privileges
+                    WHERE TABLE_SCHEMA = '{db_name}'
+                      AND PRIVILEGE_TYPE IN ('SELECT','INSERT','UPDATE','DELETE','CREATE','DROP','ALTER','INDEX')
+                    UNION
+                    SELECT DISTINCT CONCAT(User,'@',Host) FROM mysql.db WHERE Db = '{db_name}'
+                """)
+                user_list = sorted({row[0].replace("'", "").strip() for row in cursor.fetchall()})
+                users_text = ", ".join(user_list) if user_list else "Keine Benutzer"
+                db_tree.insert('', 'end', text=db_name, values=(users_text, size, table_count))
+            cursor.close()
+            connection.close()
+            el['status_bar'].config(text=self.lang.get('databases_found').format(len(db_tree.get_children())))
         except Exception as e:
             messagebox.showerror(self.lang.get('error'), f"{self.lang.get('error')}:\n{str(e)}")
+            if 'connection' in locals() and connection:
+                connection.close()
     
     def start_server(self, server_id=None):
         """Starts the LAMP-Server"""
